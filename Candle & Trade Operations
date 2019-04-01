@@ -1,0 +1,145 @@
+#property copyright "Copyright 2019, MetaQuotes Software Corp."
+#property link      "https://www.mql5.com"
+#property version   "1.00"
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+
+// Using the indicator signals to place trades.
+// We are only checking the High and Low and also the new candle check func.
+
+// importing a MQL5 trade class
+// Trade Classes are used to open, manage and close trades.
+// Trade.mqh: is an already written trade opening, management and closing library. ( others can be written yourself )
+#include <Trade/Trade.mqh>
+// CTrade trade: Calling the trade class by referencing it.   
+CTrade trade;
+
+// Declaring externally modifiable parameters.
+
+// LotSize:       Volume of every trade the EA opens.
+// MagicNumber:   used by the EA to identify trades it opened.
+// Slippage:      Used to keep trades from opening too far from the current price.
+input double   LotSize = 0.01;
+input int      MagicNumber = 65262; 
+input int      Slippage = 10;
+
+
+input double step = 0.02;
+input double maximum = 0.02;
+
+// if we used 'input' before the int, the int can be seen in the parameters.
+// without the input, the value will only be used by funcs within the EA. 
+int sarvalue;
+double sar_value[];
+
+// Declaring internal values that needs to work with the EA like point value and Ask/Bid values.
+double tpoint, bid, ask, tradenow, High[], Low[], Close[], Open[];
+
+
+
+int OnInit()
+  {
+
+// OnInit: Where we set some of the trade class parameters.
+// **** If you use trade.SetTypeFilling or trade.SetMarginMode, they can be set if we have a specific order filling method.
+  trade.SetExpertMagicNumber(MagicNumber);
+  trade.SetDeviationInPoints(Slippage);
+  trade.SetAsyncMode(false); 
+// Populating the values ( It's set in the OnInit() func because it never changes here)
+   tpoint = Point();
+  
+// We use NULL or Symbol(), these mean that we are using the indicator on the current symbol the EA is placed on.
+      sarvalue = iSAR(Symbol(), PERIOD_CURRENT, step, maximum);   
+   
+
+   return(INIT_SUCCEEDED);
+  }
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+//---
+   
+  }
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+
+// Setting the ask and bid prices in the OnTick() because the values change on every tick.
+ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+
+
+   
+   ArraySetAsSeries(sar_value, true);
+   
+ // CopyBuffer: copies the values in the handle to the array we created.
+ // The first input: the indicator handle ( sarvalue )
+ // 2nd input: SAR only has 1 buffer, so we will copy buffer 0. ( if it had 3 buffers, we will need 3 CopyBuffer funcs )
+ // 3rd input: Start position. ( where we start counting from ). We count from the current candle backwards, we enter candle 0.
+ // 4th input: Stop position: '4'. We want to stop at the 4th candle. ( we are counting backwards 0,1,2,3,4 )    
+ // 5th input:  sar_value: the destination array where the values will be saved. ( 5 candles ) 
+   CopyBuffer(sarvalue,0,0,4,sar_value);
+
+// Commenting the SAR values to chart. ( displays the SAR values to the top left of the screen below one click trading )
+
+   Comment(sar_value[1], " ", sar_value[2], " ", sar_value[3]);
+   
+   // places 1 trade on every candle the signal is spotted.
+   if(IsNewCandle()){tradenow = 1;}
+   
+   if(iLow(Symbol(), 0, 2)<sar_value[2] && iHigh(Symbol(), 0, 1)>sar_value[1] && tradenow==1) {
+      trade.Buy(LotSize, NULL, ask, 0, 0, NULL);
+      tradenow = 0;
+   }  
+   
+   if(iLow(Symbol(), 0, 2) > sar_value[2] && iHigh(Symbol(), 0, 1) < sar_value[1] && tradenow == 1) {
+      trade.Sell(LotSize, NULL, bid, 0, 0, NULL);
+      tradenow = 0;
+   }  
+  
+}
+   
+  
+//+------------------------------------------------------------------+
+
+
+// Insuring It's a new candle func.
+
+
+bool IsNewCandle()
+{
+   static int BarsOnChart = 0;
+   
+   if (Bars(_Symbol,PERIOD_CURRENT) == BarsOnChart)
+   return (false);
+   BarsOnChart = Bars(_Symbol,PERIOD_CURRENT);
+   return (true);
+}
+
+// Get low for specified bar index ( ********** Basically the OHLC funcs )
+/*
+double iLow(string symbol(), ENUM_TIMEFRAMES timeframe, int index)
+   {
+   double low = 0
+   ArraySetAsSeries(Low, true);
+   int copied = CopyLow(symbol, timeframe, 0, Bars(symbol, timeframe), Low);
+   if(copied > 0 && index < copied) low = Low[index];
+   return(low);
+   }
+*/
+
+//Get high for specified bar index
+
+double iHigh(string symbol, ENUM_TIMEFRAMES timeframe, int index)
+   {
+   double high = 0;
+   ArraySetAsSeries(High, true);
+   int copied = CopyHigh(symbol, timeframe, 0, Bars(symbol, timeframe), High);
+   if(copied > 0 && index < copied) high = High[index];
+   return(high);
+   }
